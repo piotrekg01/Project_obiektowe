@@ -1,0 +1,98 @@
+import re
+from typing import List, Optional
+import pandas as pd
+import math
+
+class Figura:
+    def __init__(self, country: str, year: int, value: float):
+        self.country = country
+        self.year = year
+        self.value = value
+
+    def __str__(self):
+        return f"Figura(country={self.country}, year={self.year}, value={self.value})"
+
+class ReaderExcel:
+    def __init__(self, start_cell: str, end_cell: str, sheet_name: Optional[str] = None):
+        self.start_cell = start_cell
+        self.end_cell = end_cell
+        self.sheet_name = sheet_name
+
+    @staticmethod
+    def _col_letter_to_index(col: str) -> int:
+        idx = 0
+        for char in col.upper():
+            idx = idx * 26 + (ord(char) - ord('A') + 1)
+        return idx - 1
+
+    def _parse_cell(self, cell: str) -> (int, int):
+        col_letters = ''.join(re.findall(r'[A-Za-z]+', cell))
+        row_numbers = ''.join(re.findall(r'\d+', cell))
+        col_idx = self._col_letter_to_index(col_letters)
+        row_idx = int(row_numbers) - 1
+        return row_idx, col_idx
+
+    def read_data(self, path_to_file: str) -> List[Figura]:
+        data: List[Figura] = []
+
+        df = pd.read_excel(path_to_file, sheet_name=self.sheet_name, header=None)
+        r0, c0 = self._parse_cell(self.start_cell)
+        r1, c1 = self._parse_cell(self.end_cell)
+        sub = df.iloc[r0:r1+1, c0:c1+1].copy()
+
+        # Usuwamy drugi wiersz (indeks 1), jeśli istnieje
+       # if sub.shape[0] > 1:
+           # sub.drop(sub.index[1], inplace=True)
+
+        if sub.shape[0] > 2:  # sprawdzamy, czy są co najmniej 3 wiersze
+             sub.drop(sub.index[[1, 2]], inplace=True)
+
+        print(sub.head(10))  # pokaż pierwsze 10 wierszy, by upewnić się, że coś jest
+        print(f"Liczba wierszy po usunięciu: {len(sub)}")
+
+
+        # Pierwszy wiersz w sub zawiera lata
+        raw_years = sub.iloc[0, 1:].tolist()
+        years = []
+        for y in raw_years:
+            if pd.isna(y):
+                continue
+            try:
+                years.append(int(y))
+            except ValueError:
+                continue
+
+        # Pozostałe wiersze to dane krajów
+        for idx in range(1, sub.shape[0]):
+            row = sub.iloc[idx]
+            country = str(row.iloc[0])
+            raw_values = row.iloc[1::2].tolist()  # co drugą kolumnę (zgodnie z oryginałem)
+            for year, val in zip(years, raw_values):
+                try:
+                    value = float(val)
+                    if math.isnan(value):  # <- tu sprawdzamy czy value jest NaN
+                        continue
+                    data.append(Figura(country, year, value))
+                except (ValueError, TypeError):
+                    continue
+                data.append(Figura(country, year, value))
+        print(sub.head(10))  # pokaż pierwsze 10 wierszy, by upewnić się, że coś jest
+        print(f"Liczba wierszy po usunięciu: {len(sub)}")
+        return data
+   
+
+class AppExcel:
+    def __init__(self, path_to_file: str, start_cell: str = 'A9', end_cell: str = 'S40', sheet_name: Optional[str] = None):
+        self.path = path_to_file
+        self.reader = ReaderExcel(start_cell, end_cell, sheet_name)
+
+    def run(self) -> List[Figura]:
+        figures = self.reader.read_data(self.path)
+       
+
+        sheet = self.reader.sheet_name or 'first'
+        print(f"Wczytano {len(figures)} rekordów z arkusza '{sheet}':")
+        for fig in figures:
+            print(fig)
+        return figures
+
